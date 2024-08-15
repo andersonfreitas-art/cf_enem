@@ -1,13 +1,29 @@
 import pandas as pd
 from fpdf import FPDF
 
+NOTA_MIN_LINGUAGENS = 287.0
+NOTA_MAX_LINGUAGENS = 820.8
+NOTA_MIN_HUMANAS = 289.9
+NOTA_MAX_HUMANAS = 823.0
+NOTA_MIN_MATEMATICA = 319.8
+NOTA_MAX_MATEMATICA = 958.6
+NOTA_MIN_NATUREZA = 314.4
+NOTA_MAX_NATUREZA = 868.4
 
-def calcular_pontuacao(df, questoes_inicio, questoes_fim):
-    # Somar as pontuações e multiplicar por 22.22
+NUMERO_QUESTOES_POR_PROVA = 45
+
+
+def calcular_multiplicador(nota_min, nota_max):
+    multiplicador = (nota_max - nota_min) / NUMERO_QUESTOES_POR_PROVA
+    return multiplicador
+
+
+def calcular_acertos(df, questoes_inicio, questoes_fim):
+    # Somar os scores das questões corretas
     colunas_pontuacao = [
         f"Q {i} Marks" for i in range(questoes_inicio, questoes_fim + 1)
     ]
-    return df[colunas_pontuacao].sum(axis=1) * 22.22
+    return df[colunas_pontuacao].sum(axis=1)
 
 
 # Ler todas as planilhas de um arquivo Excel
@@ -19,14 +35,14 @@ except Exception as e:
     raise RuntimeError(f"Erro ao ler o arquivo Excel: {e}")
 
 # Processar cada planilha
-df_linguagens_natureza = planilhas["Planilha1"]
-df_matematica_humanas = planilhas["Planilha2"]
+df_linguagens_humanas = planilhas["Planilha1"]
+df_matematica_natureza = planilhas["Planilha2"]
 df_redacao = planilhas["Planilha3"]
 
 # Verificar consistência dos nomes
 try:
-    nomes_1 = df_linguagens_natureza["Name"]
-    nomes_2 = df_matematica_humanas["Name"]
+    nomes_1 = df_linguagens_humanas["Name"]
+    nomes_2 = df_matematica_natureza["Name"]
     nomes_3 = df_redacao["Name"]
 
     if not nomes_1.equals(nomes_2) or not nomes_1.equals(nomes_3):
@@ -34,15 +50,27 @@ try:
 except KeyError as e:
     raise KeyError(f"Coluna ausente na planilha: {e}")
 
-# Calcular pontuações
-linguagens = calcular_pontuacao(df_linguagens_natureza, 1, 45)
-natureza = calcular_pontuacao(df_linguagens_natureza, 46, 90)
-matematica = calcular_pontuacao(df_matematica_humanas, 1, 45)
-humanas = calcular_pontuacao(df_matematica_humanas, 46, 90)
+# Calcular notas por área
+linguagens = (
+    calcular_acertos(df_linguagens_humanas, 1, 45)
+    * calcular_multiplicador(NOTA_MIN_LINGUAGENS, NOTA_MAX_LINGUAGENS)
+) + NOTA_MIN_LINGUAGENS
+humanas = (
+    calcular_acertos(df_linguagens_humanas, 46, 90)
+    * calcular_multiplicador(NOTA_MIN_HUMANAS, NOTA_MAX_HUMANAS)
+) + NOTA_MIN_HUMANAS
+matematica = (
+    calcular_acertos(df_matematica_natureza, 1, 45)
+    * calcular_multiplicador(NOTA_MIN_MATEMATICA, NOTA_MAX_MATEMATICA)
+) + NOTA_MIN_MATEMATICA
+natureza = (
+    calcular_acertos(df_matematica_natureza, 46, 90)
+    * calcular_multiplicador(NOTA_MIN_NATUREZA, NOTA_MAX_NATUREZA)
+) + NOTA_MIN_NATUREZA
 redacao = df_redacao["Nota Redacao"]
 
 # Calcular a média geral
-media_geral = (linguagens + natureza + matematica + humanas + redacao) / 5
+media_geral = (linguagens + humanas + matematica + natureza + redacao) / 5
 
 # Criar o PDF
 pdf = FPDF()
@@ -57,9 +85,9 @@ pdf.cell(0, 10, "Resultados do Simulado ENEM", ln=True, align="C")
 colunas = [
     "Nome",
     "Linguagens",
-    "Natureza",
-    "Matemática",
     "Humanas",
+    "Matemática",
+    "Natureza",
     "Redação",
     "Média Geral",
 ]
@@ -78,9 +106,9 @@ for i in range(len(nomes_1)):
     dados = [
         nomes_1.iloc[i],
         f"{linguagens.iloc[i]:.1f}",
-        f"{natureza.iloc[i]:.1f}",
-        f"{matematica.iloc[i]:.1f}",
         f"{humanas.iloc[i]:.1f}",
+        f"{matematica.iloc[i]:.1f}",
+        f"{natureza.iloc[i]:.1f}",
         f"{redacao.iloc[i]:.1f}",
         f"{media_geral.iloc[i]:.1f}",
     ]

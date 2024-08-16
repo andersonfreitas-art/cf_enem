@@ -1,8 +1,7 @@
 import pandas as pd
 from fpdf import FPDF
-import logging
 
-# Constantes de nota
+# Parâmetros de nota por área
 NOTA_MIN_LINGUAGENS = 287.0
 NOTA_MAX_LINGUAGENS = 820.8
 NOTA_MIN_HUMANAS = 289.9
@@ -11,27 +10,18 @@ NOTA_MIN_MATEMATICA = 319.8
 NOTA_MAX_MATEMATICA = 958.6
 NOTA_MIN_NATUREZA = 314.4
 NOTA_MAX_NATUREZA = 868.4
+
+# Parâmetros da prova
 NUMERO_QUESTOES_POR_PROVA = 45
+
+# Parâmetros do PDF
 TITULO_DOCUMENTO = "Resultados do Simulado ENEM"
-
-# Configuração de logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+ORDEM = "RD"  # "AC", "AD", "RC", "RD" para ordenar a lista
 
 
-def calcular_multiplicador(area):
+def calcular_multiplicador(nota_min, nota_max):
     """Calcular o multiplicador baseado nos valores mínimo e máximo das notas."""
-    if area == "linguagens":
-        return (NOTA_MAX_LINGUAGENS - NOTA_MIN_LINGUAGENS) / NUMERO_QUESTOES_POR_PROVA
-    elif area == "humanas":
-        return (NOTA_MAX_HUMANAS - NOTA_MIN_HUMANAS) / NUMERO_QUESTOES_POR_PROVA
-    elif area == "matematica":
-        return (NOTA_MAX_MATEMATICA - NOTA_MIN_MATEMATICA) / NUMERO_QUESTOES_POR_PROVA
-    elif area == "natureza":
-        return (NOTA_MAX_NATUREZA - NOTA_MIN_NATUREZA) / NUMERO_QUESTOES_POR_PROVA
-    else:
-        raise ValueError(f"Área desconhecida: {area}")
+    return (nota_max - nota_min) / NUMERO_QUESTOES_POR_PROVA
 
 
 def calcular_acertos(df, questoes_inicio, questoes_fim):
@@ -45,30 +35,21 @@ def calcular_acertos(df, questoes_inicio, questoes_fim):
 def carregar_planilhas(arquivo):
     """Carregar planilhas do arquivo Excel e retornar os DataFrames."""
     try:
-        planilhas = pd.read_excel(arquivo, sheet_name=None)
-        logging.info(f"Planilhas carregadas com sucesso do arquivo {arquivo}")
-        return planilhas
+        return pd.read_excel(arquivo, sheet_name=None)
     except Exception as e:
-        logging.error(f"Erro ao ler o arquivo Excel: {e}")
         raise RuntimeError(f"Erro ao ler o arquivo Excel: {e}")
 
 
 def verificar_nomes_consistentes(df_linguagens, df_matematica, df_redacao):
     """Verificar se os nomes dos alunos são consistentes entre as planilhas."""
-    try:
-        nomes_1 = df_linguagens["Name"]
-        nomes_2 = df_matematica["Name"]
-        nomes_3 = df_redacao["Name"]
+    nomes_1 = df_linguagens["Name"]
+    nomes_2 = df_matematica["Name"]
+    nomes_3 = df_redacao["Name"]
 
-        if not nomes_1.equals(nomes_2) or not nomes_1.equals(nomes_3):
-            raise ValueError("Os nomes dos alunos nas planilhas não coincidem.")
+    if not nomes_1.equals(nomes_2) or not nomes_1.equals(nomes_3):
+        raise ValueError("Os nomes dos alunos nas planilhas não coincidem.")
 
-        logging.info("Verificação de consistência dos nomes concluída com sucesso.")
-        return nomes_1
-
-    except KeyError as e:
-        logging.error(f"Coluna ausente na planilha: {e}")
-        raise KeyError(f"Coluna ausente na planilha: {e}")
+    return nomes_1
 
 
 def calcular_notas(df_linguagens_humanas, df_matematica_natureza, df_redacao):
@@ -79,13 +60,19 @@ def calcular_notas(df_linguagens_humanas, df_matematica_natureza, df_redacao):
     natureza_acertos = calcular_acertos(df_matematica_natureza, 46, 90)
 
     linguagens = (
-        linguagens_acertos * calcular_multiplicador("linguagens") + NOTA_MIN_LINGUAGENS
-    )
-    humanas = humanas_acertos * calcular_multiplicador("humanas") + NOTA_MIN_HUMANAS
+        linguagens_acertos
+        * calcular_multiplicador(NOTA_MIN_LINGUAGENS, NOTA_MAX_LINGUAGENS)
+    ) + NOTA_MIN_LINGUAGENS
+    humanas = (
+        humanas_acertos * calcular_multiplicador(NOTA_MIN_HUMANAS, NOTA_MAX_HUMANAS)
+    ) + NOTA_MIN_HUMANAS
     matematica = (
-        matematica_acertos * calcular_multiplicador("matematica") + NOTA_MIN_MATEMATICA
-    )
-    natureza = natureza_acertos * calcular_multiplicador("natureza") + NOTA_MIN_NATUREZA
+        matematica_acertos
+        * calcular_multiplicador(NOTA_MIN_MATEMATICA, NOTA_MAX_MATEMATICA)
+    ) + NOTA_MIN_MATEMATICA
+    natureza = (
+        natureza_acertos * calcular_multiplicador(NOTA_MIN_NATUREZA, NOTA_MAX_NATUREZA)
+    ) + NOTA_MIN_NATUREZA
     redacao = df_redacao["Nota Redacao"]
 
     media_geral = (linguagens + humanas + matematica + natureza + redacao) / 5
@@ -93,81 +80,78 @@ def calcular_notas(df_linguagens_humanas, df_matematica_natureza, df_redacao):
     return linguagens, humanas, matematica, natureza, redacao, media_geral
 
 
-def criar_pdf(
-    nomes,
-    linguagens,
-    humanas,
-    matematica,
-    natureza,
-    redacao,
-    media_geral,
-    output_path,
-    logo_path=None,
-):
+def ordenar_resultados(df, ordem):
+    """Ordenar os resultados conforme a constante ORDEM."""
+    if ordem == "AC":
+        df = df.sort_values(by="Name", ascending=True)
+    elif ordem == "AD":
+        df = df.sort_values(by="Name", ascending=False)
+    elif ordem == "RC":
+        df = df.sort_values(by="Média Geral", ascending=True)
+    elif ordem == "RD":
+        df = df.sort_values(by="Média Geral", ascending=False)
+    return df
+
+
+def criar_pdf(df, output_path, logo_path=None):
     """Criar o PDF com os resultados dos simulados, incluindo um logotipo se fornecido."""
-    try:
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=13)
-        pdf.add_page()
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=13)
+    pdf.add_page()
 
-        # Inserir logo, se fornecido
-        if logo_path:
-            logo_width = 45  # Largura desejada da logomarca
-            page_width = pdf.w  # Largura da página
-            logo_x = (
-                page_width - logo_width
-            ) / 2  # Calcula a posição x para centralizar a logomarca
-            pdf.image(
-                logo_path, x=logo_x, y=8, w=logo_width
-            )  # Insere a logomarca centralizada
-            pdf.ln(25)  # Espaço adicional após a logo
+    # Inserir logo, se fornecido
+    if logo_path:
+        logo_width = 45  # Largura desejada da logomarca
+        page_width = pdf.w  # Largura da página
+        logo_x = (
+            page_width - logo_width
+        ) / 2  # Calcula a posição x para centralizar a logomarca
+        pdf.image(
+            logo_path, x=logo_x, y=8, w=logo_width
+        )  # Insere a logomarca centralizada
+        pdf.ln(25)  # Espaço adicional após a logo
 
-        # Título
-        pdf.set_font("Arial", size=14, style="B")
-        pdf.cell(0, 10, TITULO_DOCUMENTO, ln=True, align="C")
+    # Título
+    pdf.set_font("Arial", size=14, style="B")
+    pdf.cell(0, 10, TITULO_DOCUMENTO, ln=True, align="C")
 
-        # Definir largura das colunas e altura das linhas
-        colunas = [
-            "Nome",
-            "Linguagens",
-            "Humanas",
-            "Matemática",
-            "Natureza",
-            "Redação",
-            "Média Geral",
+    # Definir largura das colunas e altura das linhas
+    colunas = [
+        "Nome",
+        "Linguagens",
+        "Humanas",
+        "Matemática",
+        "Natureza",
+        "Redação",
+        "Média Geral",
+    ]
+    largura_colunas = [58, 22, 22, 22, 22, 22, 22]
+    altura_linha = 7
+
+    # Adicionar cabeçalhos da tabela
+    pdf.set_font("Arial", style="B", size=10)
+    for coluna, largura in zip(colunas, largura_colunas):
+        pdf.cell(largura, altura_linha, coluna, border=1, align="C")
+    pdf.ln()
+
+    # Adicionar dados na tabela
+    pdf.set_font("Arial", size=10)
+    for index, row in df.iterrows():
+        dados = [
+            row["Name"],
+            f"{row['Linguagens']:.1f}",
+            f"{row['Humanas']:.1f}",
+            f"{row['Matemática']:.1f}",
+            f"{row['Natureza']:.1f}",
+            f"{row['Redação']:.1f}",
+            f"{row['Média Geral']:.1f}",
         ]
-        largura_colunas = [58, 22, 22, 22, 22, 22, 22]
-        altura_linha = 7
-
-        # Adicionar cabeçalhos da tabela
-        pdf.set_font("Arial", style="B", size=10)
-        for coluna, largura in zip(colunas, largura_colunas):
-            pdf.cell(largura, altura_linha, coluna, border=1, align="C")
+        for dado, largura in zip(dados, largura_colunas):
+            pdf.cell(largura, altura_linha, dado, border=1, align="C")
         pdf.ln()
 
-        # Adicionar dados na tabela
-        pdf.set_font("Arial", size=10)
-        for i in range(len(nomes)):
-            dados = [
-                nomes.iloc[i],
-                f"{linguagens.iloc[i]:.1f}",
-                f"{humanas.iloc[i]:.1f}",
-                f"{matematica.iloc[i]:.1f}",
-                f"{natureza.iloc[i]:.1f}",
-                f"{redacao.iloc[i]:.1f}",
-                f"{media_geral.iloc[i]:.1f}",
-            ]
-            for dado, largura in zip(dados, largura_colunas):
-                pdf.cell(largura, altura_linha, dado, border=1, align="C")
-            pdf.ln()
-
-        # Salvar o PDF
-        pdf.output(output_path)
-        logging.info(f"PDF gerado com sucesso: '{output_path}'")
-
-    except Exception as e:
-        logging.error(f"Erro ao criar o PDF: {e}")
-        raise RuntimeError(f"Erro ao criar o PDF: {e}")
+    # Salvar o PDF
+    pdf.output(output_path)
 
 
 def main():
@@ -192,18 +176,26 @@ def main():
         df_linguagens_humanas, df_matematica_natureza, df_redacao
     )
 
-    # Criar PDF com a logo
-    criar_pdf(
-        nomes,
-        linguagens,
-        humanas,
-        matematica,
-        natureza,
-        redacao,
-        media_geral,
-        output_path,
-        logo_path,
+    # Criar DataFrame consolidado
+    df_resultados = pd.DataFrame(
+        {
+            "Name": nomes,
+            "Linguagens": linguagens,
+            "Humanas": humanas,
+            "Matemática": matematica,
+            "Natureza": natureza,
+            "Redação": redacao,
+            "Média Geral": media_geral,
+        }
     )
+
+    # Ordenar os resultados conforme a constante ORDEM
+    df_resultados = ordenar_resultados(df_resultados, ORDEM)
+
+    # Criar PDF com a logo
+    criar_pdf(df_resultados, output_path, logo_path)
+
+    print(f"PDF gerado com sucesso: '{output_path}'")
 
 
 if __name__ == "__main__":

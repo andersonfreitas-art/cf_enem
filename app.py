@@ -52,12 +52,14 @@ def carregar_planilhas(arquivo):
         raise RuntimeError(f"Erro ao ler o arquivo Excel: {e}")
 
 
-def verificar_nomes_consistentes(df_linguagens, df_matematica, df_redacao):
+def verificar_nomes_consistentes(
+    df_prova_linguagens_humanas, df_prova_matematica_natureza, df_prova_redacao
+):
     """Verificar se os nomes dos alunos são consistentes entre as planilhas."""
     logging.info("Verificando a consistência dos nomes dos alunos entre as planilhas.")
-    nomes_1 = df_linguagens["Name"]
-    nomes_2 = df_matematica["Name"]
-    nomes_3 = df_redacao["Name"]
+    nomes_1 = df_prova_linguagens_humanas["Name"]
+    nomes_2 = df_prova_matematica_natureza["Name"]
+    nomes_3 = df_prova_redacao["Name"]
 
     if not nomes_1.equals(nomes_2) or not nomes_1.equals(nomes_3):
         logging.error("Os nomes dos alunos nas planilhas não coincidem.")

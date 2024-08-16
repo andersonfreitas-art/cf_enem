@@ -1,5 +1,11 @@
 import pandas as pd
 from fpdf import FPDF
+import logging
+
+# Configuração do logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # Parâmetros de nota por área
 NOTA_MIN_LINGUAGENS = 287.0
@@ -21,11 +27,15 @@ ORDEM = "RD"  # "AC", "AD", "RC", "RD" para ordenar a lista
 
 def calcular_multiplicador(nota_min, nota_max):
     """Calcular o multiplicador baseado nos valores mínimo e máximo das notas."""
+    logging.debug(f"Calculando multiplicador para notas entre {nota_min} e {nota_max}.")
     return (nota_max - nota_min) / NUMERO_QUESTOES_POR_PROVA
 
 
 def calcular_acertos(df, questoes_inicio, questoes_fim):
     """Calcular a soma dos acertos das questões e retornar a pontuação ajustada."""
+    logging.debug(
+        f"Calculando acertos para questões de {questoes_inicio} a {questoes_fim}."
+    )
     colunas_pontuacao = [
         f"Q {i} Marks" for i in range(questoes_inicio, questoes_fim + 1)
     ]
@@ -34,19 +44,23 @@ def calcular_acertos(df, questoes_inicio, questoes_fim):
 
 def carregar_planilhas(arquivo):
     """Carregar planilhas do arquivo Excel e retornar os DataFrames."""
+    logging.info(f"Carregando planilhas do arquivo {arquivo}.")
     try:
         return pd.read_excel(arquivo, sheet_name=None)
     except Exception as e:
+        logging.error(f"Erro ao ler o arquivo Excel: {e}")
         raise RuntimeError(f"Erro ao ler o arquivo Excel: {e}")
 
 
 def verificar_nomes_consistentes(df_linguagens, df_matematica, df_redacao):
     """Verificar se os nomes dos alunos são consistentes entre as planilhas."""
+    logging.info("Verificando a consistência dos nomes dos alunos entre as planilhas.")
     nomes_1 = df_linguagens["Name"]
     nomes_2 = df_matematica["Name"]
     nomes_3 = df_redacao["Name"]
 
     if not nomes_1.equals(nomes_2) or not nomes_1.equals(nomes_3):
+        logging.error("Os nomes dos alunos nas planilhas não coincidem.")
         raise ValueError("Os nomes dos alunos nas planilhas não coincidem.")
 
     return nomes_1
@@ -54,6 +68,7 @@ def verificar_nomes_consistentes(df_linguagens, df_matematica, df_redacao):
 
 def calcular_notas(df_linguagens_humanas, df_matematica_natureza, df_redacao):
     """Calcular as notas para todas as áreas e a média geral."""
+    logging.info("Calculando as notas para todas as áreas e a média geral.")
     linguagens_acertos = calcular_acertos(df_linguagens_humanas, 1, 45)
     humanas_acertos = calcular_acertos(df_linguagens_humanas, 46, 90)
     matematica_acertos = calcular_acertos(df_matematica_natureza, 1, 45)
@@ -82,6 +97,7 @@ def calcular_notas(df_linguagens_humanas, df_matematica_natureza, df_redacao):
 
 def ordenar_resultados(df, ordem):
     """Ordenar os resultados conforme a constante ORDEM."""
+    logging.info(f"Ordenando os resultados conforme a constante ORDEM: {ordem}.")
     if ordem == "AC":
         df = df.sort_values(by="Name", ascending=True)
     elif ordem == "AD":
@@ -95,12 +111,14 @@ def ordenar_resultados(df, ordem):
 
 def criar_pdf(df, output_path, logo_path=None):
     """Criar o PDF com os resultados dos simulados, incluindo um logotipo se fornecido."""
+    logging.info("Criando o PDF com os resultados dos simulados.")
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=13)
     pdf.add_page()
 
     # Inserir logo, se fornecido
     if logo_path:
+        logging.info(f"Inserindo a logomarca do arquivo {logo_path}.")
         logo_width = 45  # Largura desejada da logomarca
         page_width = pdf.w  # Largura da página
         logo_x = (
@@ -152,6 +170,7 @@ def criar_pdf(df, output_path, logo_path=None):
 
     # Salvar o PDF
     pdf.output(output_path)
+    logging.info(f"PDF gerado com sucesso: '{output_path}'")
 
 
 def main():
@@ -159,6 +178,8 @@ def main():
     arquivo_simulado = "simulado.xlsx"
     output_path = "Resultados_Simulado_ENEM.pdf"
     logo_path = "logo.png"  # Caminho para o arquivo da logo
+
+    logging.info("Iniciando o processo de geração do PDF.")
 
     # Carregar dados
     planilhas = carregar_planilhas(arquivo_simulado)
@@ -189,13 +210,13 @@ def main():
         }
     )
 
-    # Ordenar os resultados conforme a constante ORDEM
+    # Ordenar resultados
     df_resultados = ordenar_resultados(df_resultados, ORDEM)
 
-    # Criar PDF com a logo
+    # Criar o PDF
     criar_pdf(df_resultados, output_path, logo_path)
 
-    print(f"PDF gerado com sucesso: '{output_path}'")
+    logging.info("Processo concluído com sucesso.")
 
 
 if __name__ == "__main__":

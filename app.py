@@ -1,6 +1,7 @@
 import pandas as pd
 from fpdf import FPDF
 
+# Constantes de nota
 NOTA_MIN_LINGUAGENS = 287.0
 NOTA_MAX_LINGUAGENS = 820.8
 NOTA_MIN_HUMANAS = 289.9
@@ -9,115 +10,179 @@ NOTA_MIN_MATEMATICA = 319.8
 NOTA_MAX_MATEMATICA = 958.6
 NOTA_MIN_NATUREZA = 314.4
 NOTA_MAX_NATUREZA = 868.4
-
 NUMERO_QUESTOES_POR_PROVA = 45
+TITULO_DOCUMENTO = "Resultados do Simulado ENEM"
 
 
 def calcular_multiplicador(nota_min, nota_max):
-    multiplicador = (nota_max - nota_min) / NUMERO_QUESTOES_POR_PROVA
-    return multiplicador
+    """Calcular o multiplicador baseado nos valores mínimo e máximo das notas."""
+    return (nota_max - nota_min) / NUMERO_QUESTOES_POR_PROVA
 
 
 def calcular_acertos(df, questoes_inicio, questoes_fim):
-    # Somar os scores das questões corretas
+    """Calcular a soma dos acertos das questões e retornar a pontuação ajustada."""
     colunas_pontuacao = [
         f"Q {i} Marks" for i in range(questoes_inicio, questoes_fim + 1)
     ]
     return df[colunas_pontuacao].sum(axis=1)
 
 
-# Ler todas as planilhas de um arquivo Excel
-arquivo_simulado = "simulado.xlsx"
+def carregar_planilhas(arquivo):
+    """Carregar planilhas do arquivo Excel e retornar os DataFrames."""
+    try:
+        return pd.read_excel(arquivo, sheet_name=None)
+    except Exception as e:
+        raise RuntimeError(f"Erro ao ler o arquivo Excel: {e}")
 
-try:
-    planilhas = pd.read_excel(arquivo_simulado, sheet_name=None)
-except Exception as e:
-    raise RuntimeError(f"Erro ao ler o arquivo Excel: {e}")
 
-# Processar cada planilha
-df_linguagens_humanas = planilhas["Planilha1"]
-df_matematica_natureza = planilhas["Planilha2"]
-df_redacao = planilhas["Planilha3"]
-
-# Verificar consistência dos nomes
-try:
-    nomes_1 = df_linguagens_humanas["Name"]
-    nomes_2 = df_matematica_natureza["Name"]
+def verificar_nomes_consistentes(df_linguagens, df_matematica, df_redacao):
+    """Verificar se os nomes dos alunos são consistentes entre as planilhas."""
+    nomes_1 = df_linguagens["Name"]
+    nomes_2 = df_matematica["Name"]
     nomes_3 = df_redacao["Name"]
 
     if not nomes_1.equals(nomes_2) or not nomes_1.equals(nomes_3):
         raise ValueError("Os nomes dos alunos nas planilhas não coincidem.")
-except KeyError as e:
-    raise KeyError(f"Coluna ausente na planilha: {e}")
 
-# Calcular notas por área
-linguagens = (
-    calcular_acertos(df_linguagens_humanas, 1, 45)
-    * calcular_multiplicador(NOTA_MIN_LINGUAGENS, NOTA_MAX_LINGUAGENS)
-) + NOTA_MIN_LINGUAGENS
-humanas = (
-    calcular_acertos(df_linguagens_humanas, 46, 90)
-    * calcular_multiplicador(NOTA_MIN_HUMANAS, NOTA_MAX_HUMANAS)
-) + NOTA_MIN_HUMANAS
-matematica = (
-    calcular_acertos(df_matematica_natureza, 1, 45)
-    * calcular_multiplicador(NOTA_MIN_MATEMATICA, NOTA_MAX_MATEMATICA)
-) + NOTA_MIN_MATEMATICA
-natureza = (
-    calcular_acertos(df_matematica_natureza, 46, 90)
-    * calcular_multiplicador(NOTA_MIN_NATUREZA, NOTA_MAX_NATUREZA)
-) + NOTA_MIN_NATUREZA
-redacao = df_redacao["Nota Redacao"]
+    return nomes_1
 
-# Calcular a média geral
-media_geral = (linguagens + humanas + matematica + natureza + redacao) / 5
 
-# Criar o PDF
-pdf = FPDF()
-pdf.set_auto_page_break(auto=True, margin=13)
-pdf.add_page()
+def calcular_notas(df_linguagens_humanas, df_matematica_natureza, df_redacao):
+    """Calcular as notas para todas as áreas e a média geral."""
+    linguagens_acertos = calcular_acertos(df_linguagens_humanas, 1, 45)
+    humanas_acertos = calcular_acertos(df_linguagens_humanas, 46, 90)
+    matematica_acertos = calcular_acertos(df_matematica_natureza, 1, 45)
+    natureza_acertos = calcular_acertos(df_matematica_natureza, 46, 90)
 
-# Título
-pdf.set_font("Arial", size=14)
-pdf.cell(0, 10, "Resultados do Simulado ENEM", ln=True, align="C")
+    linguagens = (
+        linguagens_acertos
+        * calcular_multiplicador(NOTA_MIN_LINGUAGENS, NOTA_MAX_LINGUAGENS)
+    ) + NOTA_MIN_LINGUAGENS
+    humanas = (
+        humanas_acertos * calcular_multiplicador(NOTA_MIN_HUMANAS, NOTA_MAX_HUMANAS)
+    ) + NOTA_MIN_HUMANAS
+    matematica = (
+        matematica_acertos
+        * calcular_multiplicador(NOTA_MIN_MATEMATICA, NOTA_MAX_MATEMATICA)
+    ) + NOTA_MIN_MATEMATICA
+    natureza = (
+        natureza_acertos * calcular_multiplicador(NOTA_MIN_NATUREZA, NOTA_MAX_NATUREZA)
+    ) + NOTA_MIN_NATUREZA
+    redacao = df_redacao["Nota Redacao"]
 
-# Definir largura das colunas e altura das linhas
-colunas = [
-    "Nome",
-    "Linguagens",
-    "Humanas",
-    "Matemática",
-    "Natureza",
-    "Redação",
-    "Média Geral",
-]
-largura_colunas = [58, 22, 22, 22, 22, 22, 22]  # Largura das colunas ajustada
-altura_linha = 7
+    media_geral = (linguagens + humanas + matematica + natureza + redacao) / 5
 
-# Adicionar cabeçalhos da tabela
-pdf.set_font("Arial", style="B", size=10)
-for i, coluna in enumerate(colunas):
-    pdf.cell(largura_colunas[i], altura_linha, coluna, border=1, align="C")
-pdf.ln()
+    return linguagens, humanas, matematica, natureza, redacao, media_geral
 
-# Adicionar dados na tabela com fonte menor
-pdf.set_font("Arial", size=10)
-for i in range(len(nomes_1)):
-    dados = [
-        nomes_1.iloc[i],
-        f"{linguagens.iloc[i]:.1f}",
-        f"{humanas.iloc[i]:.1f}",
-        f"{matematica.iloc[i]:.1f}",
-        f"{natureza.iloc[i]:.1f}",
-        f"{redacao.iloc[i]:.1f}",
-        f"{media_geral.iloc[i]:.1f}",
+
+def criar_pdf(
+    nomes,
+    linguagens,
+    humanas,
+    matematica,
+    natureza,
+    redacao,
+    media_geral,
+    output_path,
+    logo_path=None,
+):
+    """Criar o PDF com os resultados dos simulados, incluindo um logotipo se fornecido."""
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=13)
+    pdf.add_page()
+
+    # Inserir logo, se fornecido
+    if logo_path:
+        logo_width = 45  # Largura desejada da logomarca
+        page_width = pdf.w  # Largura da página
+        logo_x = (
+            page_width - logo_width
+        ) / 2  # Calcula a posição x para centralizar a logomarca
+        pdf.image(
+            logo_path, x=logo_x, y=8, w=logo_width
+        )  # Insere a logomarca centralizada
+        pdf.ln(25)  # Espaço adicional após a logo
+
+    # Título
+    pdf.set_font("Arial", size=14, style="B")
+    pdf.cell(0, 10, TITULO_DOCUMENTO, ln=True, align="C")
+
+    # Definir largura das colunas e altura das linhas
+    colunas = [
+        "Nome",
+        "Linguagens",
+        "Humanas",
+        "Matemática",
+        "Natureza",
+        "Redação",
+        "Média Geral",
     ]
-    for j, dado in enumerate(dados):
-        pdf.cell(largura_colunas[j], altura_linha, dado, border=1, align="C")
+    largura_colunas = [58, 22, 22, 22, 22, 22, 22]
+    altura_linha = 7
+
+    # Adicionar cabeçalhos da tabela
+    pdf.set_font("Arial", style="B", size=10)
+    for coluna, largura in zip(colunas, largura_colunas):
+        pdf.cell(largura, altura_linha, coluna, border=1, align="C")
     pdf.ln()
 
-# Salvar o PDF
-pdf_output_path = "Resultados_Simulado_ENEM.pdf"
-pdf.output(pdf_output_path)
+    # Adicionar dados na tabela
+    pdf.set_font("Arial", size=10)
+    for i in range(len(nomes)):
+        dados = [
+            nomes.iloc[i],
+            f"{linguagens.iloc[i]:.1f}",
+            f"{humanas.iloc[i]:.1f}",
+            f"{matematica.iloc[i]:.1f}",
+            f"{natureza.iloc[i]:.1f}",
+            f"{redacao.iloc[i]:.1f}",
+            f"{media_geral.iloc[i]:.1f}",
+        ]
+        for dado, largura in zip(dados, largura_colunas):
+            pdf.cell(largura, altura_linha, dado, border=1, align="C")
+        pdf.ln()
 
-print(f"PDF gerado com sucesso: '{pdf_output_path}'")
+    # Salvar o PDF
+    pdf.output(output_path)
+
+
+def main():
+    """Função principal para executar o processo."""
+    arquivo_simulado = "simulado.xlsx"
+    output_path = "Resultados_Simulado_ENEM.pdf"
+    logo_path = "logo.png"  # Caminho para o arquivo da logo
+
+    # Carregar dados
+    planilhas = carregar_planilhas(arquivo_simulado)
+    df_linguagens_humanas = planilhas["Planilha1"]
+    df_matematica_natureza = planilhas["Planilha2"]
+    df_redacao = planilhas["Planilha3"]
+
+    # Verificar nomes
+    nomes = verificar_nomes_consistentes(
+        df_linguagens_humanas, df_matematica_natureza, df_redacao
+    )
+
+    # Calcular notas
+    linguagens, humanas, matematica, natureza, redacao, media_geral = calcular_notas(
+        df_linguagens_humanas, df_matematica_natureza, df_redacao
+    )
+
+    # Criar PDF com a logo
+    criar_pdf(
+        nomes,
+        linguagens,
+        humanas,
+        matematica,
+        natureza,
+        redacao,
+        media_geral,
+        output_path,
+        logo_path,
+    )
+
+    print(f"PDF gerado com sucesso: '{output_path}'")
+
+
+if __name__ == "__main__":
+    main()

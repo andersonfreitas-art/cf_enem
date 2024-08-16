@@ -164,10 +164,22 @@ def criar_pdf(df, output_path, logo_path=None):
             f"{row['Matemática']:.1f}",
             f"{row['Natureza']:.1f}",
             f"{row['Redação']:.1f}",
-            f"{row['Média Geral']:.1f}",
         ]
-        for dado, largura in zip(dados, largura_colunas):
+
+        # Adicionar os dados das colunas padrão
+        for dado, largura in zip(dados, largura_colunas[:-1]):
             pdf.cell(largura, altura_linha, dado, border=1, align="C")
+
+        # Adicionar a média geral em negrito
+        pdf.set_font("Arial", style="B", size=10)
+        pdf.cell(
+            largura_colunas[-1],
+            altura_linha,
+            f"{row['Média Geral']:.1f}",
+            border=1,
+            align="C",
+        )
+        pdf.set_font("Arial", size=10)  # Retorna para a fonte padrão
         pdf.ln()
 
     # Salvar o PDF
